@@ -22,6 +22,9 @@ const getHeartShape = () => {
 const createImage = (url: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
     const image = new Image();
+    if (!url.startsWith('data:') && !url.startsWith('blob:')) {
+      image.crossOrigin = 'anonymous';
+    }
     image.addEventListener('load', () => resolve(image));
     image.addEventListener('error', (error) => reject(error));
     image.src = url;
@@ -133,20 +136,27 @@ function MagnetModel({ textureUrl, shape }: { textureUrl: string; shape: string 
   useEffect(() => {
     if (!textureUrl) return;
     const loader = new THREE.TextureLoader();
-    if (textureUrl.startsWith('data:') || textureUrl.startsWith('blob:')) {
-      loader.setCrossOrigin('');
+    if (!textureUrl.startsWith('data:') && !textureUrl.startsWith('blob:')) {
+      loader.setCrossOrigin('anonymous');
     }
     let isMounted = true;
-    loader.load(textureUrl, (tex) => {
-      if (isMounted) {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        if (shape === 'Round') {
-          tex.center.set(0.5, 0.5);
-          tex.rotation = -Math.PI / 2; // Rotate 90 degrees clockwise to align right-side up
+    loader.load(
+      textureUrl,
+      (tex) => {
+        if (isMounted) {
+          tex.colorSpace = THREE.SRGBColorSpace;
+          if (shape === 'Round') {
+            tex.center.set(0.5, 0.5);
+            tex.rotation = -Math.PI / 2; // Rotate 90 degrees clockwise to align right-side up
+          }
+          setTexture(tex);
         }
-        setTexture(tex);
+      },
+      undefined,
+      (err) => {
+        console.error('Failed to load texture:', err);
       }
-    });
+    );
     return () => {
       isMounted = false;
     };
@@ -530,9 +540,8 @@ export default function CreateMagnet() {
               ✕ Close Preview
             </button>
           </div>
-          
-          <div style={{ flex: 1, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative', pointerEvents: 'auto' }}>
-            <div style={{ width: '100%', height: '100%', maxWidth: '800px', maxHeight: '800px', position: 'relative', pointerEvents: 'auto' }}>
+          <div style={{ flex: 1, width: '100%', minHeight: '60vh', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative', pointerEvents: 'auto' }}>
+            <div style={{ width: '100%', height: '100%', minHeight: '60vh', maxWidth: '800px', maxHeight: '800px', position: 'relative', pointerEvents: 'auto' }}>
               <Canvas shadows={{ type: THREE.PCFShadowMap }} camera={{ position: [0, 0, 4], fov: 40 }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'auto' }}>
                 <ambientLight intensity={0.7} />
                 <directionalLight position={[5, 5, 5]} intensity={0.9} castShadow />
