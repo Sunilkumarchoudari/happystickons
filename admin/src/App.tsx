@@ -40,7 +40,18 @@ interface Banner {
   isActive: boolean;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const getCleanApiUrl = () => {
+  let base = rawApiUrl.trim();
+  while (base.endsWith('/')) {
+    base = base.slice(0, -1);
+  }
+  if (!base.endsWith('/api')) {
+    base = `${base}/api`;
+  }
+  return base;
+};
+const API_URL = getCleanApiUrl();
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);

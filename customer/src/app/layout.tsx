@@ -58,7 +58,7 @@ export default function RootLayout({
                   <h3>🔗 Quick Links</h3>
                   <Link href="/">🏠 Home</Link>
                   <Link href="/create">✨ Create Magnet</Link>
-                  <Link href="/track">📦 Track Order</Link>
+                  <Link href="/profile">📦 Track Order</Link>
                   <Link href="#">❓ FAQ</Link>
                 </div>
                 <div>
