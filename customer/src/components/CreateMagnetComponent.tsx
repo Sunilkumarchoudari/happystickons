@@ -31,34 +31,70 @@ const getRadianAngle = (degreeValue: number) => {
   return (degreeValue * Math.PI) / 180;
 };
 
-async function getCroppedImg(imageSrc: string, pixelCrop: any, rotation = 0, brightness = 1, contrast = 1): Promise<string | null> {
-  const image = await createImage(imageSrc);
-  
-  const maxSize = Math.max(image.width, image.height);
-  const safeArea = Math.ceil(2 * ((maxSize / 2) * Math.sqrt(2)));
+const rotateSize = (width: number, height: number, rotation: number) => {
+  const rotRad = (rotation * Math.PI) / 180;
+  return {
+    width: Math.abs(Math.cos(rotRad) * width) + Math.abs(Math.sin(rotRad) * height),
+    height: Math.abs(Math.sin(rotRad) * width) + Math.abs(Math.cos(rotRad) * height),
+  };
+};
 
+async function getCroppedImg(
+  imageSrc: string,
+  pixelCrop: any,
+  rotation = 0,
+  brightness = 1,
+  contrast = 1
+): Promise<string | null> {
+  const image = await createImage(imageSrc);
+  let workingImage = image;
+  let scaleX = 1;
+  let scaleY = 1;
+  const MAX_IMAGE_SIZE = 2048;
+  
+  if (image.width > MAX_IMAGE_SIZE || image.height > MAX_IMAGE_SIZE) {
+    const scale = Math.min(MAX_IMAGE_SIZE / image.width, MAX_IMAGE_SIZE / image.height);
+    const resizeCanvas = document.createElement('canvas');
+    resizeCanvas.width = Math.ceil(image.width * scale);
+    resizeCanvas.height = Math.ceil(image.height * scale);
+    const resizeCtx = resizeCanvas.getContext('2d');
+    if (resizeCtx) {
+      resizeCtx.drawImage(image, 0, 0, resizeCanvas.width, resizeCanvas.height);
+      const resizedImg = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = resizeCanvas.toDataURL('image/jpeg', 0.9);
+      });
+      workingImage = resizedImg;
+      scaleX = resizeCanvas.width / image.width;
+      scaleY = resizeCanvas.height / image.height;
+    }
+  }
+
+  const scaledPixelCrop = {
+    x: pixelCrop.x * scaleX,
+    y: pixelCrop.y * scaleY,
+    width: pixelCrop.width * scaleX,
+    height: pixelCrop.height * scaleY
+  };
+
+  const { width: bBoxWidth, height: bBoxHeight } = rotateSize(workingImage.width, workingImage.height, rotation);
   const bBoxCanvas = document.createElement('canvas');
-  bBoxCanvas.width = safeArea;
-  bBoxCanvas.height = safeArea;
+  bBoxCanvas.width = bBoxWidth;
+  bBoxCanvas.height = bBoxHeight;
   const bBoxCtx = bBoxCanvas.getContext('2d');
   if (!bBoxCtx) return null;
 
-  bBoxCtx.translate(safeArea / 2, safeArea / 2);
+  bBoxCtx.translate(bBoxWidth / 2, bBoxHeight / 2);
   bBoxCtx.rotate(getRadianAngle(rotation));
-  bBoxCtx.translate(-safeArea / 2, -safeArea / 2);
-
+  bBoxCtx.translate(-workingImage.width / 2, -workingImage.height / 2);
   bBoxCtx.filter = `brightness(${brightness}) contrast(${contrast})`;
+  bBoxCtx.drawImage(workingImage, 0, 0);
 
-  bBoxCtx.drawImage(
-    image,
-    safeArea / 2 - image.width * 0.5,
-    safeArea / 2 - image.height * 0.5
-  );
-
-  let finalWidth = Math.ceil(pixelCrop.width);
-  let finalHeight = Math.ceil(pixelCrop.height);
+  let finalWidth = Math.ceil(scaledPixelCrop.width);
+  let finalHeight = Math.ceil(scaledPixelCrop.height);
   const MAX_SIZE = 800;
-  
   if (finalWidth > MAX_SIZE || finalHeight > MAX_SIZE) {
     const scale = Math.min(MAX_SIZE / finalWidth, MAX_SIZE / finalHeight);
     finalWidth = Math.ceil(finalWidth * scale);
@@ -69,17 +105,13 @@ async function getCroppedImg(imageSrc: string, pixelCrop: any, rotation = 0, bri
   finalCanvas.width = finalWidth;
   finalCanvas.height = finalHeight;
   const finalCtx = finalCanvas.getContext('2d');
-
   finalCtx?.drawImage(
     bBoxCanvas,
-    Math.round(safeArea / 2 - image.width * 0.5 + pixelCrop.x),
-    Math.round(safeArea / 2 - image.height * 0.5 + pixelCrop.y),
-    Math.round(pixelCrop.width),
-    Math.round(pixelCrop.height),
-    0,
-    0,
-    finalWidth,
-    finalHeight
+    Math.round(scaledPixelCrop.x),
+    Math.round(scaledPixelCrop.y),
+    Math.round(scaledPixelCrop.width),
+    Math.round(scaledPixelCrop.height),
+    0, 0, finalWidth, finalHeight
   );
 
   return new Promise((resolve) => {
@@ -101,6 +133,9 @@ function MagnetModel({ textureUrl, shape }: { textureUrl: string; shape: string 
   useEffect(() => {
     if (!textureUrl) return;
     const loader = new THREE.TextureLoader();
+    if (textureUrl.startsWith('data:') || textureUrl.startsWith('blob:')) {
+      loader.setCrossOrigin('');
+    }
     let isMounted = true;
     loader.load(textureUrl, (tex) => {
       if (isMounted) {
